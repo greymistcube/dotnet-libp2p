@@ -41,7 +41,10 @@ namespace blockchain
                     }
                     else
                     {
-                        Console.WriteLine("This feature is not yet supported.");
+                        Transaction transaction = new Transaction(Guid.NewGuid().ToString());
+                        Console.WriteLine($"Created transaction: {transaction}");
+                        byte[] bytes = Codec.Encode(transaction);
+                        await BroadcastMessage(bytes, cancellationToken);
                     }
                 }
                 else if (input == "exit")
