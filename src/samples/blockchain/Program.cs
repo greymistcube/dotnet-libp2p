@@ -26,7 +26,7 @@ namespace blockchain
                     throw new ArgumentException($"The first argument should be either -m or -c: {args[0]}");
             }
 
-            var consoleInterface = new ConsoleInterface();
+            var consoleInterface = new ConsoleInterface(new Chain(), new MemPool(), miner);
             ServiceProvider serviceProvider = new ServiceCollection()
                 .AddLibp2p(builder => builder.AddAppLayerProtocol<ChatProtocol>(new ChatProtocol(consoleInterface)))
                 .AddLogging(builder =>
@@ -46,7 +46,7 @@ namespace blockchain
             Task transportTask = miner
                 ? RunMiner(logger, peerFactory, args, ts.Token)
                 : RunClient(logger, peerFactory, args, ts.Token);
-            Task consoleTask = consoleInterface.StartAsync(new Chain(), miner, ts.Token);
+            Task consoleTask = consoleInterface.StartAsync(ts.Token);
 
             await Task.WhenAny(transportTask, consoleTask);
         }
