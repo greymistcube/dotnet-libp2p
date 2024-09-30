@@ -13,14 +13,17 @@ namespace blockchain
 
         public void Append(Block block)
         {
-            if (_blocks.Count() != block.Index)
+            if (_blocks.Count != block.Index)
             {
                 throw new ArgumentException(
-                    $"Given {nameof(block)} must have index {_blocks.Count()}: {block.Index}",
+                    $"Given {nameof(block)} must have index {_blocks.Count}: {block.Index}",
                     nameof(block));
             }
 
             _blocks.Add(block);
         }
+
+        public Block Mine(List<Transaction> transactions) =>
+            new Block(_blocks.Count, transactions);
     }
 }

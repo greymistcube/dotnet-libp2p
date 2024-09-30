@@ -9,11 +9,26 @@ namespace blockchain
 {
     public static class Program
     {
+        public const string ListenerAddressFileName = "listener.txt";
+
         public static async Task Main(string[] args)
         {
-            var miner = !(args.Length > 0 && args[0] == "-d");
+            bool miner;
+            switch (args[0])
+            {
+                case "-m":
+                    miner = true;
+                    break;
+                case "-c":
+                    miner = false;
+                    break;
+                default:
+                    throw new ArgumentException($"The first argument should be either -m or -c: {args[0]}");
+            }
+
+            var consoleInterface = new ConsoleInterface();
             ServiceProvider serviceProvider = new ServiceCollection()
-                .AddLibp2p(builder => builder.AddAppLayerProtocol<ChatProtocol>())
+                .AddLibp2p(builder => builder.AddAppLayerProtocol<ChatProtocol>(new ChatProtocol(consoleInterface)))
                 .AddLogging(builder =>
                     builder.SetMinimumLevel(args.Contains("--trace") ? LogLevel.Trace : LogLevel.Information)
                         .AddSimpleConsole(l =>
@@ -28,44 +43,66 @@ namespace blockchain
 
             CancellationTokenSource ts = new();
 
-            if (miner)
+            Task transportTask = miner
+                ? RunMiner(logger, peerFactory, args, ts.Token)
+                : RunClient(logger, peerFactory, args, ts.Token);
+            Task consoleTask = consoleInterface.StartAsync(new Chain(), miner, ts.Token);
+
+            await Task.WhenAny(transportTask, consoleTask);
+        }
+
+        public static async Task RunMiner(
+            ILogger logger,
+            IPeerFactory peerFactory,
+            string[] args,
+            CancellationToken cancellationToken = default)
+        {
+            logger.LogInformation("Running as a miner");
+
+            Identity optionalFixedIdentity = new(Enumerable.Repeat((byte)42, 32).ToArray());
+            ILocalPeer peer = peerFactory.Create(optionalFixedIdentity);
+
+            string addrTemplate = "/ip4/127.0.0.1/tcp/{0}";
+            IListener listener = await peer.ListenAsync(
+                string.Format(addrTemplate, args.Length > 0 && args[0] == "-sp" ? args[1] : "0"),
+                cancellationToken);
+            using (StreamWriter outputFile = new StreamWriter(ListenerAddressFileName, false))
             {
-                Identity optionalFixedIdentity = new(Enumerable.Repeat((byte)42, 32).ToArray());
-                ILocalPeer peer = peerFactory.Create(optionalFixedIdentity);
-
-                string addrTemplate = args.Contains("-quic") ?
-                    "/ip4/0.0.0.0/udp/{0}/quic-v1" :
-                    "/ip4/0.0.0.0/tcp/{0}";
-
-                IListener listener = await peer.ListenAsync(
-                    string.Format(addrTemplate, args.Length > 0 && args[0] == "-sp" ? args[1] : "0"),
-                    ts.Token);
-                logger.LogInformation("Listener started at {address}", listener.Address);
-                listener.OnConnection += remotePeer =>
-                {
-                    logger.LogInformation("A peer connected {remote}", remotePeer.Address);
-                    return Task.CompletedTask;
-                };
-                Console.CancelKeyPress += delegate { listener.DisconnectAsync(); };
-
-                await listener;
+                outputFile.WriteLine(listener.Address.ToString());
             }
-            else
+            logger.LogInformation("Listener started at {address}", listener.Address);
+
+            listener.OnConnection += remotePeer =>
             {
-                Multiaddress remoteAddr = args[1];
+                logger.LogInformation("A peer connected {remote}", remotePeer.Address);
+                return Task.CompletedTask;
+            };
+            Console.CancelKeyPress += delegate { listener.DisconnectAsync(); };
 
-                string addrTemplate = remoteAddr.Has<QUICv1>() ?
-                "/ip4/0.0.0.0/udp/0/quic-v1" :
-                "/ip4/0.0.0.0/tcp/0";
+            await listener;
+        }
 
-                ILocalPeer localPeer = peerFactory.Create(localAddr: addrTemplate);
+        public static async Task RunClient(
+            ILogger logger,
+            IPeerFactory peerFactory,
+            string[] args,
+            CancellationToken cancellationToken = default)
+        {
+            logger.LogInformation("Running as a client");
 
-                logger.LogInformation("Dialing {remote}", remoteAddr);
-                IRemotePeer remotePeer = await localPeer.DialAsync(remoteAddr, ts.Token);
+            string addrTemplate = "/ip4/127.0.0.1/tcp/0";
+            ILocalPeer localPeer = peerFactory.Create(localAddr: addrTemplate);
 
-                await remotePeer.DialAsync<ChatProtocol>(ts.Token);
-                await remotePeer.DisconnectAsync();
+            Multiaddress remoteAddr;
+            using (StreamReader inputFile = new StreamReader(ListenerAddressFileName))
+            {
+                remoteAddr = inputFile.ReadLine();
             }
+            logger.LogInformation("Dialing {remote}", remoteAddr);
+            IRemotePeer remotePeer = await localPeer.DialAsync(remoteAddr, cancellationToken);
+
+            await remotePeer.DialAsync<ChatProtocol>(cancellationToken);
+            await remotePeer.DisconnectAsync();
         }
     }
 }

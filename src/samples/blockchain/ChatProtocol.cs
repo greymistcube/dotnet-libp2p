@@ -11,8 +11,14 @@ namespace blockchain
     {
         private static readonly ConsoleReader Reader = new();
         private readonly ConsoleColor defautConsoleColor = Console.ForegroundColor;
+        private readonly ConsoleInterface _consoleInterface;
 
         public string Id => "/chat/1.0.0";
+
+        public ChatProtocol(ConsoleInterface consoleInterface)
+        {
+            _consoleInterface = consoleInterface;
+        }
 
         protected override async Task ConnectAsync(
             IChannel channel,
@@ -20,29 +26,23 @@ namespace blockchain
             IPeerContext context,
             bool isListener)
         {
-            Console.Write("> ");
-            _ = Task.Run(async () =>
+            _consoleInterface.AddSendAsync(bytes => SendMessage(channel, context, bytes));
+            while (true)
             {
-                for (; ; )
-                {
-                    ReadOnlySequence<byte> read = await channel.ReadAsync(0, ReadBlockingMode.WaitAny).OrThrow();
-                    Console.ForegroundColor = ConsoleColor.Green;
-                    Console.WriteLine("{0}", Encoding.UTF8.GetString(read).Replace("\r", "").Replace("\n\n", ""));
-                    Console.ForegroundColor = defautConsoleColor;
-                    Console.Write("> ");
-                }
-            });
-            for (; ; )
-            {
-                string line = await Reader.ReadLineAsync();
-                if (line == "exit")
-                {
-                    return;
-                }
-                Console.Write("> ");
-                byte[] buf = Encoding.UTF8.GetBytes(line + "\n\n");
-                await channel.WriteAsync(new ReadOnlySequence<byte>(buf));
+                ReadOnlySequence<byte> read = await channel.ReadAsync(0, ReadBlockingMode.WaitAny).OrThrow();
+                Console.ForegroundColor = ConsoleColor.DarkGreen;
+                Console.WriteLine($"Reaceived a message of length {read.Length}");
+                Console.ForegroundColor = defautConsoleColor;
+                _consoleInterface.ReceiveMessage(read.ToArray());
             }
+        }
+
+        public async Task SendMessage(IChannel channel, IPeerContext context, byte[] bytes)
+        {
+            await channel.WriteAsync(new ReadOnlySequence<byte>(bytes));
+            Console.ForegroundColor = ConsoleColor.DarkRed;
+            Console.WriteLine($"Sent a message of length {bytes.Length}");
+            Console.ForegroundColor = defautConsoleColor;
         }
     }
 }

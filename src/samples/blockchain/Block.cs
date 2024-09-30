@@ -8,6 +8,13 @@ namespace blockchain
             Transactions = transactions;
         }
 
+        public Block(string serialized)
+        {
+            var components = serialized.Split(",");
+            Index = int.Parse(components[0]);
+            Transactions = components.Skip(1).Select(s => new Transaction(s)).ToList();
+        }
+
         public int Index { get; }
 
         public IReadOnlyList<Transaction> Transactions { get; }
