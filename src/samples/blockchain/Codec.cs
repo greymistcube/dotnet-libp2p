@@ -13,5 +13,10 @@ namespace blockchain
             new byte[] { (byte)MessageType.Transaction }
                 .Concat(Encoding.UTF8.GetBytes(transaction.ToString()))
                 .ToArray();
+
+        public static byte[] Encode(Chain chain) =>
+            new byte[] { (byte)MessageType.Blocks }
+                .Concat(Encoding.UTF8.GetBytes(chain.ToString()))
+                .ToArray();
     }
 }

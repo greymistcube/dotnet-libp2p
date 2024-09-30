@@ -26,14 +26,14 @@ namespace blockchain
             IPeerContext context,
             bool isListener)
         {
-            _consoleInterface.AddSendAsync(bytes => SendMessage(channel, context, bytes));
+            _consoleInterface.AddSendAsync(context.RemotePeer.Address, bytes => SendMessage(channel, context, bytes));
             while (true)
             {
                 ReadOnlySequence<byte> read = await channel.ReadAsync(0, ReadBlockingMode.WaitAny).OrThrow();
                 Console.ForegroundColor = ConsoleColor.DarkGreen;
-                Console.WriteLine($"Reaceived a message of length {read.Length}");
+                Console.WriteLine($"Reaceived a message of length {read.Length} from {context.RemotePeer.Address}");
                 Console.ForegroundColor = defautConsoleColor;
-                _consoleInterface.ReceiveMessage(read.ToArray());
+                await _consoleInterface.ReceiveMessage(read.ToArray(), context);
             }
         }
 
@@ -41,7 +41,7 @@ namespace blockchain
         {
             await channel.WriteAsync(new ReadOnlySequence<byte>(bytes));
             Console.ForegroundColor = ConsoleColor.DarkRed;
-            Console.WriteLine($"Sent a message of length {bytes.Length}");
+            Console.WriteLine($"Sent a message of length {bytes.Length} to {context.RemotePeer.Address}");
             Console.ForegroundColor = defautConsoleColor;
         }
     }

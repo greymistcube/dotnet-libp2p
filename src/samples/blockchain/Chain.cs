@@ -9,6 +9,11 @@ namespace blockchain
             _blocks = new List<Block>();
         }
 
+        public Chain(string serialized)
+        {
+            _blocks = serialized.Split(":").Select(s => new Block(s)).ToList();
+        }
+
         public IReadOnlyList<Block> Blocks => _blocks;
 
         public void Append(Block block)
@@ -25,5 +30,7 @@ namespace blockchain
 
         public Block Mine(List<Transaction> transactions) =>
             new Block(_blocks.Count, transactions);
+
+        public override string ToString() => string.Join(":", _blocks.Select(block => block.ToString()));
     }
 }
