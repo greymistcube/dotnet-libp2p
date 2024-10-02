@@ -1,11 +1,7 @@
 // SPDX-FileCopyrightText: 2023 Demerzel Solutions Limited
 // SPDX-License-Identifier: MIT
 
-using System.Buffers;
-using System.Text;
-using Nethermind.Libp2p.Core;
-
-namespace blockchain
+namespace Blockchain
 {
     internal class ConsoleReader
     {

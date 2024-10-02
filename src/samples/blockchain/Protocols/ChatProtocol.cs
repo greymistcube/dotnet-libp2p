@@ -1,16 +1,11 @@
-// SPDX-FileCopyrightText: 2023 Demerzel Solutions Limited
-// SPDX-License-Identifier: MIT
-
 using System.Buffers;
-using System.Text;
 using Nethermind.Libp2p.Core;
 
-namespace blockchain
+namespace Blockchain.Protocols
 {
     internal class ChatProtocol : SymmetricProtocol, IProtocol
     {
-        private static readonly ConsoleReader Reader = new();
-        private readonly ConsoleColor defautConsoleColor = Console.ForegroundColor;
+        private readonly ConsoleColor defaultConsoleColor = Console.ForegroundColor;
         private readonly ConsoleInterface _consoleInterface;
 
         public string Id => "/chat/1.0.0";
@@ -32,7 +27,7 @@ namespace blockchain
                 ReadOnlySequence<byte> read = await channel.ReadAsync(0, ReadBlockingMode.WaitAny).OrThrow();
                 Console.ForegroundColor = ConsoleColor.DarkGreen;
                 Console.WriteLine($"Reaceived a message of length {read.Length} from {context.RemotePeer.Address}");
-                Console.ForegroundColor = defautConsoleColor;
+                Console.ForegroundColor = defaultConsoleColor;
                 await _consoleInterface.ReceiveMessage(read.ToArray(), context);
             }
         }
@@ -42,7 +37,7 @@ namespace blockchain
             await channel.WriteAsync(new ReadOnlySequence<byte>(bytes));
             Console.ForegroundColor = ConsoleColor.DarkRed;
             Console.WriteLine($"Sent a message of length {bytes.Length} to {context.RemotePeer.Address}");
-            Console.ForegroundColor = defautConsoleColor;
+            Console.ForegroundColor = defaultConsoleColor;
         }
     }
 }

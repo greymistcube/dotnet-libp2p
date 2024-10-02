@@ -1,6 +1,6 @@
 using System.Text;
 
-namespace blockchain
+namespace Blockchain
 {
     public static class Codec
     {

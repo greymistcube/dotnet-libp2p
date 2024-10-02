@@ -2,7 +2,7 @@ using System.Text;
 using Multiformats.Address;
 using Nethermind.Libp2p.Core;
 
-namespace blockchain
+namespace Blockchain
 {
     public class ConsoleInterface
     {

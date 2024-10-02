@@ -1,4 +1,4 @@
-namespace blockchain
+namespace Blockchain
 {
     public class Block
     {

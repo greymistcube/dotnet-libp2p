@@ -3,9 +3,9 @@ using Microsoft.Extensions.Logging;
 using Nethermind.Libp2p.Stack;
 using Nethermind.Libp2p.Core;
 using Multiformats.Address;
-using Multiformats.Address.Protocols;
+using Blockchain.Protocols;
 
-namespace blockchain
+namespace Blockchain
 {
     public static class Program
     {
@@ -28,7 +28,8 @@ namespace blockchain
 
             var consoleInterface = new ConsoleInterface(new Chain(), new MemPool(), miner);
             ServiceProvider serviceProvider = new ServiceCollection()
-                .AddLibp2p(builder => builder.AddAppLayerProtocol<ChatProtocol>(new ChatProtocol(consoleInterface)))
+                .AddLibp2p(builder => builder
+                    .AddAppLayerProtocol<ChatProtocol>(new ChatProtocol(consoleInterface)))
                 .AddLogging(builder =>
                     builder.SetMinimumLevel(args.Contains("--trace") ? LogLevel.Trace : LogLevel.Information)
                         .AddSimpleConsole(l =>
