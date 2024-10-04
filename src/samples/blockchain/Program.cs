@@ -29,7 +29,9 @@ namespace Blockchain
             var consoleInterface = new ConsoleInterface(new Chain(), new MemPool(), miner);
             ServiceProvider serviceProvider = new ServiceCollection()
                 .AddLibp2p(builder => builder
-                    .AddAppLayerProtocol<ChatProtocol>(new ChatProtocol(consoleInterface)))
+                    .AddAppLayerProtocol<HandshakeProtocol>(new HandshakeProtocol(consoleInterface))
+                    .AddAppLayerProtocol<BroadcastProtocol>(new BroadcastProtocol(consoleInterface))
+                    .AddAppLayerProtocol<PingPongProtocol>(new PingPongProtocol(consoleInterface)))
                 .AddLogging(builder =>
                     builder.SetMinimumLevel(args.Contains("--trace") ? LogLevel.Trace : LogLevel.Information)
                         .AddSimpleConsole(l =>
@@ -102,7 +104,7 @@ namespace Blockchain
             logger.LogInformation("Dialing {remote}", remoteAddr);
             IRemotePeer remotePeer = await localPeer.DialAsync(remoteAddr, cancellationToken);
 
-            await remotePeer.DialAsync<ChatProtocol>(cancellationToken);
+            await remotePeer.DialAsync<HandshakeProtocol>(cancellationToken);
             await remotePeer.DisconnectAsync();
         }
     }

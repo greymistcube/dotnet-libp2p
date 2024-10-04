@@ -7,8 +7,8 @@ namespace Blockchain
     public class ConsoleInterface
     {
         private static ConsoleReader _consoleReader = new ConsoleReader();
-
-        public Dictionary<Multiaddress, Func<byte[], Task>> _sendMessageAsyncs = new Dictionary<Multiaddress, Func<byte[], Task>>();
+        private Func<byte[], Task>? _toSendMessageTask = null;
+        public event EventHandler<byte[]>? MessageToBroadcast;
 
         private Chain _chain;
         private MemPool _memPool;
@@ -39,14 +39,14 @@ namespace Blockchain
                         Console.WriteLine($"Created block: {block}");
                         _chain.Append(block);
                         byte[] bytes = Codec.Encode(block);
-                        await BroadcastMessage(bytes, cancellationToken);
+                        MessageToBroadcast?.Invoke(this, bytes);
                     }
                     else
                     {
                         Console.WriteLine("Cannot create a block with a non-miner node.");
                     }
                 }
-                else if (input == "transaction")
+                else if (input == "tx")
                 {
                     if (_miner)
                     {
@@ -57,11 +57,13 @@ namespace Blockchain
                         Transaction transaction = new Transaction(Guid.NewGuid().ToString());
                         Console.WriteLine($"Created transaction: {transaction}");
                         byte[] bytes = Codec.Encode(transaction);
-                        await BroadcastMessage(bytes, cancellationToken);
+                        MessageToBroadcast?.Invoke(this, bytes);
                     }
                 }
                 else if (input == "sync")
                 {
+                    // NOTE: This should normally be initiated with polling with
+                    // some way of retrieving a target remote to sync.
                     if (_miner)
                     {
                         Console.WriteLine("Cannot sync chain as a miner node.");
@@ -70,7 +72,14 @@ namespace Blockchain
                     else
                     {
                         byte[] bytes = { (byte)MessageType.GetBlocks };
-                        await BroadcastMessage(bytes, cancellationToken);
+                        if (_toSendMessageTask is { } toTask)
+                        {
+                            await toTask(bytes);
+                        }
+                        else
+                        {
+                            throw new NullReferenceException();
+                        }
                     }
                 }
                 else if (input == "exit")
@@ -85,12 +94,10 @@ namespace Blockchain
             }
         }
 
-        public void AddSendAsync(Multiaddress multiaddress, Func<byte[], Task> sendMessageAsync) =>
-            _sendMessageAsyncs.Add(multiaddress, sendMessageAsync);
-
-        public async Task ReceiveMessage(byte[] bytes, IPeerContext context)
+        public async Task ReceiveBroadcastMessage(byte[] bytes, IPeerContext context)
         {
-            if (bytes[0] == (byte)MessageType.Block)
+            byte messageType = bytes[0];
+            if (messageType == (byte)MessageType.Block)
             {
                 var block = new Block(Encoding.UTF8.GetString(bytes.Skip(1).ToArray()));
                 Console.WriteLine($"Received block: {block}");
@@ -104,7 +111,7 @@ namespace Blockchain
                     Console.WriteLine($"Ignoring block as the index does not match {_chain.Blocks.Count}.");
                 }
             }
-            else if (bytes[0] == (byte)MessageType.Transaction)
+            else if (messageType == (byte)MessageType.Transaction)
             {
                 var transaction = new Transaction(Encoding.UTF8.GetString(bytes.Skip(1).ToArray()));
                 Console.WriteLine($"Received transaction: {transaction}");
@@ -113,12 +120,24 @@ namespace Blockchain
                     _memPool.Add(transaction);
                 }
             }
-            else if (bytes[0] == (byte)MessageType.GetBlocks)
+            else
             {
-                Console.WriteLine($"Received get blocks request.");
-                await SendMessage(context.RemotePeer.Address, Codec.Encode(_chain));
+                Console.WriteLine($"Received a message of unknown type: {messageType}");
             }
-            else if (bytes[0] == (byte)MessageType.Blocks)
+        }
+
+        public async Task RecievePingPongMessage(
+            byte[] bytes,
+            Func<byte[], Task> toSendReplyMessageTask,
+            CancellationToken cancellationToken = default)
+        {
+            byte messageType = bytes[0];
+            if (messageType == (byte)MessageType.GetBlocks)
+            {
+                Console.WriteLine($"Received get blocks.");
+                await toSendReplyMessageTask(Codec.Encode(_chain));
+            }
+            else if (messageType == (byte)MessageType.Blocks)
             {
                 var chain = new Chain(Encoding.UTF8.GetString(bytes.Skip(1).ToArray()));
                 Console.WriteLine($"Received {chain.Blocks.Count} blocks.");
@@ -135,19 +154,15 @@ namespace Blockchain
 
                 Console.WriteLine($"Appended {appended} blocks to current chain.");
             }
-        }
-
-        public async Task BroadcastMessage(byte[] bytes, CancellationToken cancellationToken = default)
-        {
-            foreach ((_, var sendMessageAsync) in _sendMessageAsyncs)
+            else
             {
-                await sendMessageAsync(bytes);
+                Console.WriteLine($"Received a message of unknown type: {messageType}");
             }
         }
 
-        public async Task SendMessage(Multiaddress multiaddress, byte[] bytes, CancellationToken cancellationToken = default)
+        public void SetToSendMessageTask(Func<byte[], Task> toSendMessageTask)
         {
-            await _sendMessageAsyncs[multiaddress](bytes);
+            _toSendMessageTask = toSendMessageTask;
         }
     }
 }
