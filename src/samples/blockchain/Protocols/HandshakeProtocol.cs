@@ -31,13 +31,16 @@ namespace Blockchain.Protocols
             IChannelFactory? channelFactory,
             IPeerContext context)
         {
-            Console.ForegroundColor = protocolConsoleColor;
-            Console.WriteLine($"Remote peer {context.RemotePeer.Address} has connected.");
-            Console.ForegroundColor = defaultConsoleColor;
-
-            while (true)
+            try
             {
-                await Task.Delay(1000);
+                Console.ForegroundColor = protocolConsoleColor;
+                Console.WriteLine($"Remote peer {context.RemotePeer.Address} has cconnected.");
+                Console.ForegroundColor = defaultConsoleColor;
+                var _ = await channel.ReadAsync(0, ReadBlockingMode.WaitAny).OrThrow();
+            }
+            finally
+            {
+                Console.WriteLine($"Remote peer {context.RemotePeer.Address} has disconnected.");
             }
         }
     }
