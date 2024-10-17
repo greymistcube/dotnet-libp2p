@@ -7,5 +7,7 @@ namespace Blockchain
 
         GetBlocks = 0x11,
         Blocks = 0x12,
+
+        Signal = 0x21,
     }
 }

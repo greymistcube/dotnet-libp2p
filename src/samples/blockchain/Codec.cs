@@ -1,4 +1,5 @@
 using System.Text;
+using Multiformats.Address;
 
 namespace Blockchain
 {

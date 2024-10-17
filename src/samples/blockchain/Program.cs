@@ -3,7 +3,8 @@ using Microsoft.Extensions.Logging;
 using Nethermind.Libp2p.Stack;
 using Nethermind.Libp2p.Core;
 using Multiformats.Address;
-using Blockchain.Protocols;
+using Blockchain.Network;
+using Blockchain.Network.Protocols;
 
 namespace Blockchain
 {
@@ -26,12 +27,15 @@ namespace Blockchain
                     throw new ArgumentException($"The first argument should be either -m or -c: {args[0]}");
             }
 
-            var consoleInterface = new ConsoleInterface(new Chain(), new MemPool(), miner);
+            var routingTable = new RoutingTable();
+            var transport = new Transport(routingTable);
+            var consoleInterface = new ConsoleInterface(transport, new Chain(), new MemPool(), miner);
+
             ServiceProvider serviceProvider = new ServiceCollection()
                 .AddLibp2p(builder => builder
-                    .AddAppLayerProtocol<HandshakeProtocol>(new HandshakeProtocol(consoleInterface))
-                    .AddAppLayerProtocol<BroadcastProtocol>(new BroadcastProtocol(consoleInterface))
-                    .AddAppLayerProtocol<PingPongProtocol>(new PingPongProtocol(consoleInterface)))
+                    .AddAppLayerProtocol<PeerExchangeProtocol>(new PeerExchangeProtocol(routingTable))
+                    .AddAppLayerProtocol<BroadcastProtocol>(new BroadcastProtocol(transport))
+                    .AddAppLayerProtocol<PingPongProtocol>(new PingPongProtocol(transport)))
                 .AddLogging(builder =>
                     builder.SetMinimumLevel(args.Contains("--trace") ? LogLevel.Trace : LogLevel.Information)
                         .AddSimpleConsole(l =>
@@ -41,39 +45,22 @@ namespace Blockchain
                         }))
                 .BuildServiceProvider();
 
-            ILogger logger = serviceProvider.GetService<ILoggerFactory>()!.CreateLogger("Chat");
-            IPeerFactory peerFactory = serviceProvider.GetService<IPeerFactory>()!;
-
             CancellationTokenSource ts = new();
 
-            Task transportTask = miner
-                ? RunMiner(logger, peerFactory, args, ts.Token)
-                : RunClient(logger, peerFactory, args, ts.Token);
-            Task consoleTask = consoleInterface.StartAsync(ts.Token);
-
-            await Task.WhenAny(transportTask, consoleTask);
-        }
-
-        public static async Task RunMiner(
-            ILogger logger,
-            IPeerFactory peerFactory,
-            string[] args,
-            CancellationToken cancellationToken = default)
-        {
-            logger.LogInformation("Running as a miner");
-
-            Identity optionalFixedIdentity = new(Enumerable.Repeat((byte)42, 32).ToArray());
-            ILocalPeer peer = peerFactory.Create(optionalFixedIdentity);
-
-            string addrTemplate = "/ip4/127.0.0.1/tcp/{0}";
-            IListener listener = await peer.ListenAsync(
-                string.Format(addrTemplate, args.Length > 0 && args[0] == "-sp" ? args[1] : "0"),
-                cancellationToken);
-            using (StreamWriter outputFile = new StreamWriter(ListenerAddressFileName, false))
-            {
-                outputFile.WriteLine(listener.Address.ToString());
-            }
+            ILogger logger = serviceProvider.GetService<ILoggerFactory>()!.CreateLogger("Chat");
+            IPeerFactory peerFactory = serviceProvider.GetService<IPeerFactory>()!;
+            string addrTemplate = "/ip4/127.0.0.1/tcp/0";
+            ILocalPeer localPeer = peerFactory.Create(localAddr: addrTemplate);
+            logger.LogInformation("Local peer created at {address}", localPeer.Address);
+            IListener listener = await localPeer.ListenAsync(addrTemplate, ts.Token);
             logger.LogInformation("Listener started at {address}", listener.Address);
+            if (miner)
+            {
+                using (StreamWriter outputFile = new StreamWriter(ListenerAddressFileName, false))
+                {
+                    outputFile.WriteLine(listener.Address.ToString());
+                }
+            }
 
             listener.OnConnection += remotePeer =>
             {
@@ -82,30 +69,44 @@ namespace Blockchain
             };
             Console.CancelKeyPress += delegate { listener.DisconnectAsync(); };
 
+            routingTable.LocalPeer = localPeer;
+            routingTable.LocalListenerAddress = listener.Address;
+
+            // NOTE: Not sure which order these should be in.
+            Task transportTask = miner
+                ? RunMiner(logger, listener, ts.Token)
+                : RunClient(logger, listener, routingTable, ts.Token);
+            Task consoleTask = consoleInterface.StartAsync(ts.Token);
+
+            await Task.WhenAny(transportTask, consoleTask);
+        }
+
+        public static async Task RunMiner(
+            ILogger logger,
+            IListener listener,
+            CancellationToken cancellationToken = default)
+        {
+            logger.LogInformation("Running as a miner");
             await listener;
         }
 
         public static async Task RunClient(
             ILogger logger,
-            IPeerFactory peerFactory,
-            string[] args,
+            IListener listener,
+            RoutingTable routingTable,
             CancellationToken cancellationToken = default)
         {
             logger.LogInformation("Running as a client");
 
-            string addrTemplate = "/ip4/127.0.0.1/tcp/0";
-            ILocalPeer localPeer = peerFactory.Create(localAddr: addrTemplate);
-
-            Multiaddress remoteAddr;
+            Multiaddress remoteListenerAddress;
             using (StreamReader inputFile = new StreamReader(ListenerAddressFileName))
             {
-                remoteAddr = inputFile.ReadLine();
+                remoteListenerAddress = inputFile.ReadLine();
             }
-            logger.LogInformation("Dialing {remote}", remoteAddr);
-            IRemotePeer remotePeer = await localPeer.DialAsync(remoteAddr, cancellationToken);
+            logger.LogInformation("Starting with seed peer {remote}", remoteListenerAddress);
 
-            await remotePeer.DialAsync<HandshakeProtocol>(cancellationToken);
-            await remotePeer.DisconnectAsync();
+            routingTable.Add(remoteListenerAddress);
+            await listener;
         }
     }
 }
