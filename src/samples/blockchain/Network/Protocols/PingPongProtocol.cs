@@ -61,7 +61,7 @@ namespace Blockchain.Network.Protocols
             while(true)
             {
                 (Multiaddress remoteAddress, byte[] message, Channel<byte[]> localChannel) = await requestRequests.Reader.ReadAsync();
-                if (remoteAddress.Equals(context.RemotePeer.Address))
+                if (remoteAddress.GetPeerId()!.Equals(context.RemotePeer.Address.GetPeerId()!))
                 {
                     await channel.WriteAsync(new ReadOnlySequence<byte>(message));
                     WriteLineToConsole($"Sent a message of length {message.Length} to {context.RemotePeer.Address}");

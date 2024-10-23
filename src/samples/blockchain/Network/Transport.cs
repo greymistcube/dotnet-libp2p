@@ -21,6 +21,8 @@ namespace Blockchain.Network
             _routingTable = routingTable;
         }
 
+        public RoutingTable RoutingTable => _routingTable;
+
         public void BroadcastMessage(byte[] message)
         {
             MessageToBroadcast?.Invoke(this, message);

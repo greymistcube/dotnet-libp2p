@@ -9,6 +9,8 @@ namespace Blockchain
             _transactions = new Dictionary<string, Transaction>();
         }
 
+        public int Count => _transactions.Count;
+
         public bool Add(Transaction transaction) =>
             _transactions.TryAdd(transaction.Id, transaction);
 
