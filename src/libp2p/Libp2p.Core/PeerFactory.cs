@@ -97,7 +97,8 @@ public class PeerFactory : IPeerFactory
 
     private Task DialAsync<TProtocol>(IPeerContext peerContext, CancellationToken token) where TProtocol : IProtocol
     {
-        TaskCompletionSource cts = new(token);
+        TaskCompletionSource cts = new();
+        token.Register(() => cts.TrySetCanceled());
         peerContext.SubDialRequests.Add(new ChannelRequest
         {
             SubProtocol = PeerFactoryBuilderBase.CreateProtocolInstance<TProtocol>(_serviceProvider),
@@ -111,7 +112,8 @@ public class PeerFactory : IPeerFactory
         try
         {
             Channel chan = new();
-            token.Register(() => _ = chan.CloseAsync());
+            TaskCompletionSource<bool> tcs = new();
+            token.Register(() => { _ = chan.CloseAsync(); tcs.TrySetCanceled(); });
 
             PeerContext context = new()
             {
@@ -121,7 +123,6 @@ public class PeerFactory : IPeerFactory
             RemotePeer result = new(this, peer, context) { Address = addr, Channel = chan };
             context.RemotePeer = result;
 
-            TaskCompletionSource<bool> tcs = new();
             RemotePeerConnected remotePeerConnected = null!;
 
             remotePeerConnected = remotePeer =>
