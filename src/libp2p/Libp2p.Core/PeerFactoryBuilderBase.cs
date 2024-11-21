@@ -7,10 +7,18 @@ namespace Nethermind.Libp2p.Core;
 
 public static class PeerFactoryBuilderBase
 {
-    private static HashSet<IProtocol> protocols = new();
+    private static HashSet<IProtocol> _protocols = new();
+
+    private static Dictionary<IServiceProvider, HashSet<IProtocol>> _protocolsDictionary = new();
 
     internal static IProtocol CreateProtocolInstance<TProtocol>(IServiceProvider serviceProvider, TProtocol? instance = default) where TProtocol : IProtocol
     {
+        if (!_protocolsDictionary.ContainsKey(serviceProvider))
+        {
+            _protocolsDictionary[serviceProvider] = new HashSet<IProtocol>();
+        }
+
+        HashSet<IProtocol> protocols = _protocolsDictionary[serviceProvider];
         if (instance is not null)
         {
             protocols.Add(instance);
